@@ -16,7 +16,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            python: ./python
+          - os: macos-latest
+            python: ./python.exe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,8 +30,8 @@ jobs:
       - name: Build CPython
         run: make -j2
       - name: Test Decimal literal compilation
-        run: ./python.exe -m test -v -m test_exact_decimal_literals test_compile
+        run: ${{ matrix.python }} -m test -v -m test_exact_decimal_literals test_compile
       - name: Test AST support
-        run: ./python.exe -m test -v test_ast.test_ast
+        run: ${{ matrix.python }} -m test -v test_ast.test_ast
       - name: Test decnond package
-        run: ./python.exe -m unittest decnond.test_decnond -v
+        run: ${{ matrix.python }} -m unittest decnond.test_decnond -v
