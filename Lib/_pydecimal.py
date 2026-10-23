@@ -654,7 +654,7 @@ class Decimal(object):
         elif isinstance(f, float):
             if _math.isinf(f) or _math.isnan(f):
                 return cls(repr(f))
-            if _math.copysign(1.0, f) == 1.0:
+            if _math.copysign(1, f) > 0:
                 sign = 0
             else:
                 sign = 1

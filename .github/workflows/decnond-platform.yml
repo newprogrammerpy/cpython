@@ -26,8 +26,8 @@ jobs:
       - name: Build CPython
         run: make -j2
       - name: Test Decimal literal compilation
-        run: ./python -m test -v -m test_exact_decimal_literals test_compile
+        run: ./python.exe -m test -v -m test_exact_decimal_literals test_compile
       - name: Test AST support
-        run: ./python -m test -v test_ast.test_ast
+        run: ./python.exe -m test -v test_ast.test_ast
       - name: Test decnond package
-        run: ./python -m unittest decnond.test_decnond -v
+        run: ./python.exe -m unittest decnond.test_decnond -v
