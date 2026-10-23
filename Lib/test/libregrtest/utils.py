@@ -68,7 +68,7 @@ FilterDict = dict[TestName, FilterTuple]
 
 
 def format_duration(seconds: float) -> str:
-    ms = math.ceil(seconds * 1e3)
+    ms = math.ceil(seconds * 1000)
     seconds, ms = divmod(ms, 1000)
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)

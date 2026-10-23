@@ -2078,6 +2078,8 @@ Module(
         self.assertEqual(starred_expr.end_col_offset, 9)
 
     def test_literal_eval(self):
+        from decimal import Decimal
+
         self.assertEqual(ast.literal_eval('[1, 2, 3]'), [1, 2, 3])
         self.assertEqual(ast.literal_eval('{"foo": 42}'), {"foo": 42})
         self.assertEqual(ast.literal_eval('(True, False, None)'), (True, False, None))
@@ -2088,10 +2090,11 @@ Module(
         self.assertEqual(ast.literal_eval('6'), 6)
         self.assertEqual(ast.literal_eval('+6'), 6)
         self.assertEqual(ast.literal_eval('-6'), -6)
-        self.assertEqual(ast.literal_eval('3.25'), 3.25)
-        self.assertEqual(ast.literal_eval('+3.25'), 3.25)
-        self.assertEqual(ast.literal_eval('-3.25'), -3.25)
-        self.assertEqual(repr(ast.literal_eval('-0.0')), '-0.0')
+        self.assertEqual(ast.literal_eval('3.25'), Decimal('3.25'))
+        self.assertEqual(ast.literal_eval('+3.25'), Decimal('3.25'))
+        self.assertEqual(ast.literal_eval('-3.25'), Decimal('-3.25'))
+        self.assertEqual(repr(ast.literal_eval('-0.0')), "Decimal('-0.0')")
+        self.assertEqual(ast.literal_eval("3.25+6.75j"), complex(3.25, 6.75))
         self.assertRaises(ValueError, ast.literal_eval, '++6')
         self.assertRaises(ValueError, ast.literal_eval, '+True')
         self.assertRaises(ValueError, ast.literal_eval, '2+3')
@@ -2114,10 +2117,10 @@ Module(
         self.assertEqual(ast.literal_eval('-3+6j'), -3+6j)
         self.assertEqual(ast.literal_eval('3-6j'), 3-6j)
         self.assertEqual(ast.literal_eval('-3-6j'), -3-6j)
-        self.assertEqual(ast.literal_eval('3.25+6.75j'), 3.25+6.75j)
-        self.assertEqual(ast.literal_eval('-3.25+6.75j'), -3.25+6.75j)
-        self.assertEqual(ast.literal_eval('3.25-6.75j'), 3.25-6.75j)
-        self.assertEqual(ast.literal_eval('-3.25-6.75j'), -3.25-6.75j)
+        self.assertEqual(ast.literal_eval('3.25+6.75j'), complex(3.25, 6.75))
+        self.assertEqual(ast.literal_eval('-3.25+6.75j'), complex(-3.25, 6.75))
+        self.assertEqual(ast.literal_eval('3.25-6.75j'), complex(3.25, -6.75))
+        self.assertEqual(ast.literal_eval('-3.25-6.75j'), complex(-3.25, -6.75))
         self.assertEqual(ast.literal_eval('(3+6j)'), 3+6j)
         self.assertRaises(ValueError, ast.literal_eval, '-6j+3')
         self.assertRaises(ValueError, ast.literal_eval, '-6j+3j')
@@ -2809,7 +2812,7 @@ class ConstantTests(unittest.TestCase):
         for level in range(3):
             nested_tuple = (nested_tuple, 2)
             nested_frozenset = frozenset({nested_frozenset, 2})
-        values = (123, 123.0, 123j,
+        values = (123, float('123.0'), 123j,
                   "unicode", b'bytes',
                   tuple("tuple"), frozenset("frozenset"),
                   nested_tuple, nested_frozenset)
@@ -2852,7 +2855,7 @@ class ConstantTests(unittest.TestCase):
         consts = [None,
                   True, False,
                   1000,
-                  2.0,
+                  float("2.0"),
                   3j,
                   "unicode",
                   b'bytes',
@@ -2860,6 +2863,7 @@ class ConstantTests(unittest.TestCase):
 
         code = '\n'.join(['x={!r}'.format(const) for const in consts])
         code += '\nx = ...'
+        consts[4] = "2.0"
         consts.extend((Ellipsis, None))
 
         tree = ast.parse(code)
@@ -3914,10 +3918,17 @@ class ASTOptimizationTests(unittest.TestCase):
         self.assert_ast(code, non_optimized_target, optimized_target)
 
     def test_folding_match_case_allowed_expressions(self):
+        from decimal import Decimal
+
+        negative_decimal = Decimal("-0.1")
+
         def get_match_case_values(node):
             result = []
             if isinstance(node, ast.Constant):
-                result.append(node.value)
+                if node.kind == "decimal":
+                    result.append(Decimal(node.value))
+                else:
+                    result.append(node.value)
             elif isinstance(node, ast.MatchValue):
                 result.extend(get_match_case_values(node.value))
             elif isinstance(node, ast.MatchMapping):
@@ -3932,7 +3943,7 @@ class ASTOptimizationTests(unittest.TestCase):
 
         tests = [
             ("-0", [0]),
-            ("-0.1", [-0.1]),
+            ("-0.1", [negative_decimal]),
             ("-0j", [complex(0, 0)]),
             ("-0.1j", [complex(0, -0.1)]),
             ("1 + 2j", [complex(1, 2)]),
@@ -3944,7 +3955,7 @@ class ASTOptimizationTests(unittest.TestCase):
             ("-0.1 + 1.1j", [complex(-0.1, 1.1)]),
             ("-0.1 - 1.1j", [complex(-0.1, -1.1)]),
             ("{-0: 0}", [0]),
-            ("{-0.1: 0}", [-0.1]),
+            ("{-0.1: 0}", [negative_decimal]),
             ("{-0j: 0}", [complex(0, 0)]),
             ("{-0.1j: 0}", [complex(0, -0.1)]),
             ("{1 + 2j: 0}", [complex(1, 2)]),
@@ -3956,14 +3967,14 @@ class ASTOptimizationTests(unittest.TestCase):
             ("{-0.1 + 1.1j: 0}", [complex(-0.1, 1.1)]),
             ("{-0.1 - 1.1j: 0}", [complex(-0.1, -1.1)]),
             ("{-0: 0, 0 + 1j: 0, 0.1 + 1j: 0}", [0, complex(0, 1), complex(0.1, 1)]),
-            ("[-0, -0.1, -0j, -0.1j]", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("[[[[-0, -0.1, -0j, -0.1j]]]]", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("[[-0, -0.1], -0j, -0.1j]", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("[[-0, -0.1], [-0j, -0.1j]]", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("(-0, -0.1, -0j, -0.1j)", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("((((-0, -0.1, -0j, -0.1j))))", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("((-0, -0.1), -0j, -0.1j)", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
-            ("((-0, -0.1), (-0j, -0.1j))", [0, -0.1, complex(0, 0), complex(0, -0.1)]),
+            ("[-0, -0.1, -0j, -0.1j]", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("[[[[-0, -0.1, -0j, -0.1j]]]]", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("[[-0, -0.1], -0j, -0.1j]", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("[[-0, -0.1], [-0j, -0.1j]]", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("(-0, -0.1, -0j, -0.1j)", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("((((-0, -0.1, -0j, -0.1j))))", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("((-0, -0.1), -0j, -0.1j)", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
+            ("((-0, -0.1), (-0j, -0.1j))", [0, negative_decimal, complex(0, 0), complex(0, -0.1)]),
         ]
         for match_expr, constants in tests:
             with self.subTest(match_expr):

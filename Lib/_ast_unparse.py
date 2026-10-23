@@ -704,6 +704,9 @@ class Unparser(NodeVisitor):
 
     def visit_Constant(self, node):
         value = node.value
+        if node.kind == "decimal":
+            self.write(value)
+            return
         if isinstance(value, tuple):
             with self.delimit("(", ")"):
                 self.items_view(self._write_constant, value)

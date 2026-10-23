@@ -93,7 +93,7 @@ __all__ = [
 
 NV_MAGICCONST = 4 * _exp(-0.5) / _sqrt(2.0)
 LOG4 = _log(4.0)
-SG_MAGICCONST = 1.0 + _log(4.5)
+SG_MAGICCONST = 1 + _log(4.5)
 BPF = 53        # Number of bits in a float
 RECIP_BPF = 2 ** -BPF
 _ONE = 1
@@ -469,7 +469,7 @@ class Random(_random.Random):
         if cum_weights is None:
             if weights is None:
                 floor = _floor
-                n += 0.0    # convert to float for a small speed improvement
+                n += 0
                 return [population[floor(random() * n)] for i in _repeat(None, k)]
             try:
                 cum_weights = list(_accumulate(weights))
@@ -484,7 +484,7 @@ class Random(_random.Random):
             raise TypeError('Cannot specify both weights and cumulative weights')
         if len(cum_weights) != n:
             raise ValueError('The number of weights does not match the population')
-        total = cum_weights[-1] + 0.0   # convert to float
+        total = cum_weights[-1] + 0
         if total <= 0.0:
             raise ValueError('Total of weights must be greater than zero')
         if not _isfinite(total):

@@ -883,9 +883,26 @@ _PyPegen_number_token(Parser *p)
                                   "in Python 3.6 and greater");
     }
 
-    PyObject *c = parsenumber(num_raw);
+    bool decimal_literal =
+        !(*num_raw == '0' &&
+          (num_raw[1] == 'x' || num_raw[1] == 'X' ||
+           num_raw[1] == 'o' || num_raw[1] == 'O' ||
+           num_raw[1] == 'b' || num_raw[1] == 'B')) &&
+        strpbrk(num_raw, ".eE") != NULL &&
+        num_raw[strlen(num_raw) - 1] != 'j' &&
+        num_raw[strlen(num_raw) - 1] != 'J';
+    PyObject *c;
+    PyObject *kind = NULL;
+    if (decimal_literal) {
+        c = PyUnicode_FromString(num_raw);
+        kind = PyUnicode_FromString("decimal");
+    }
+    else {
+        c = parsenumber(num_raw);
+    }
 
     if (c == NULL) {
+        Py_XDECREF(kind);
         p->error_indicator = 1;
         PyThreadState *tstate = _PyThreadState_GET();
         // The only way a ValueError should happen in _this_ code is via
@@ -909,13 +926,24 @@ _PyPegen_number_token(Parser *p)
         return NULL;
     }
 
-    if (_PyArena_AddPyObject(p->arena, c) < 0) {
+    if (decimal_literal && kind == NULL) {
         Py_DECREF(c);
         p->error_indicator = 1;
         return NULL;
     }
+    if (_PyArena_AddPyObject(p->arena, c) < 0) {
+        Py_DECREF(c);
+        Py_XDECREF(kind);
+        p->error_indicator = 1;
+        return NULL;
+    }
+    if (kind != NULL && _PyArena_AddPyObject(p->arena, kind) < 0) {
+        Py_DECREF(kind);
+        p->error_indicator = 1;
+        return NULL;
+    }
 
-    expr_ty result = _PyAST_Constant(c, NULL, t->lineno, t->col_offset,
+    expr_ty result = _PyAST_Constant(c, kind, t->lineno, t->col_offset,
                                     t->end_lineno, t->end_col_offset, p->arena);
     if (result != NULL && _PyPegen_insert_memo(p, mark, NUMBER, result) < 0) {
         p->error_indicator = 1;

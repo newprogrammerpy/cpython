@@ -1318,7 +1318,7 @@ three types: integers, floating-point numbers, and imaginary numbers.
    NUMBER: `integer` | `floatnumber` | `imagnumber`
 
 The numeric value of a numeric literal is the same as if it were passed as a
-string to the :class:`int`, :class:`float` or :class:`complex` class
+string to the :class:`int`, :class:`~decimal.Decimal` or :class:`complex` class
 constructor, respectively.
 Note that not all valid inputs for those constructors are also valid literals.
 
@@ -1411,8 +1411,10 @@ Formally, integer literals are described by the following lexical definitions:
 Floating-point literals
 -----------------------
 
-Floating-point (float) literals, such as ``3.14`` or ``1.5``, denote
-:ref:`approximations of real numbers <datamodel-float>`.
+Decimal floating-point literals, such as ``3.14`` or ``1.5``, denote exact
+:class:`~decimal.Decimal` values.  They are constructed from their source text,
+so a literal such as ``0.000000000000000000000001`` is exact.  Arithmetic on
+these values is subject to the active decimal context.
 
 They consist of *integer* and *fraction* parts, each composed of decimal digits.
 The parts are separated by a decimal point, ``.``::
@@ -1587,4 +1589,3 @@ is also available in the :mod:`!token` module documentation.
 
 A sequence of three consecutive periods (``...``) has a special
 meaning as an :py:data:`Ellipsis` literal.
-

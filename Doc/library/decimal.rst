@@ -26,6 +26,12 @@ The :mod:`!decimal` module provides support for fast correctly rounded
 decimal floating-point arithmetic. It offers several advantages over the
 :class:`float` datatype:
 
+Decimal floating-point literals in Python source code create :class:`Decimal`
+instances directly.  For example, ``amount = 0.10`` is equivalent to
+``amount = Decimal("0.10")`` without requiring an import or a constructor call.
+Literal construction preserves every digit; subsequent arithmetic still uses
+the current decimal context and its precision.
+
 * Decimal "is based on a `floating-point model
   <https://speleotrove.com/decimal/damodel.html#refnumber>`__ which was designed
   with people in mind, and necessarily has a paramount guiding principle --

@@ -1,0 +1,33 @@
+name: Decimal literal platforms
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decimal-literals:
+    name: Decimal literals (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configure CPython
+        run: ./configure --with-pydebug
+      - name: Build CPython
+        run: make -j2
+      - name: Test Decimal literal compilation
+        run: ./python -m test -v -m test_exact_decimal_literals test_compile
+      - name: Test AST support
+        run: ./python -m test -v test_ast.test_ast
+      - name: Test decnond package
+        run: ./python -m unittest decnond.test_decnond -v

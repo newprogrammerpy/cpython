@@ -69,6 +69,9 @@ def _convert_literal(node):
     Used by `literal_eval` to convert an AST node into a value.
     """
     if isinstance(node, Constant):
+        if node.kind == "decimal":
+            from decimal import Decimal
+            return Decimal(node.value)
         return node.value
     if isinstance(node, Dict) and len(node.keys) == len(node.values):
         return dict(zip(
@@ -90,6 +93,19 @@ def _convert_literal(node):
         isinstance(node, UnaryOp)
         and isinstance(node.op, (UAdd, USub))
         and isinstance(node.operand, Constant)
+        and node.operand.kind == "decimal"
+    ):
+        operand = _convert_literal(node.operand)
+        if isinstance(node.op, UAdd):
+            return +operand
+        if node.operand.kind == "decimal":
+            from decimal import Decimal
+            return Decimal("-" + node.operand.value)
+        return -operand
+    if (
+        isinstance(node, UnaryOp)
+        and isinstance(node.op, (UAdd, USub))
+        and isinstance(node.operand, Constant)
         and type(operand := node.operand.value) in (int, float, complex)
     ):
         if isinstance(node.op, UAdd):
@@ -101,12 +117,23 @@ def _convert_literal(node):
         and isinstance(node.op, (Add, Sub))
         and isinstance(node.left, (Constant, UnaryOp))
         and isinstance(node.right, Constant)
-        and type(left := _convert_literal(node.left)) in (int, float)
-        and type(right := _convert_literal(node.right)) is complex
     ):
-        if isinstance(node.op, Add):
-            return left + right
-        else:
+        left = _convert_literal(node.left)
+        right = _convert_literal(node.right)
+        if type(left) in (int, float) and type(right) is complex:
+            if isinstance(node.op, Add):
+                return left + right
+            return left - right
+        is_decimal = (
+            isinstance(node.left, Constant) and node.left.kind == "decimal"
+            or isinstance(node.left, UnaryOp)
+            and isinstance(node.left.operand, Constant)
+            and node.left.operand.kind == "decimal"
+        )
+        if is_decimal and type(right) is complex:
+            left = float(left)
+            if isinstance(node.op, Add):
+                return left + right
             return left - right
     msg = "malformed node or string"
     if lno := getattr(node, 'lineno', None):

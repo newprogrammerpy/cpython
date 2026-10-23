@@ -383,6 +383,8 @@ fold_binop(expr_ty node, PyArena *arena, _PyASTPreprocessState *state)
 
     if (node->v.BinOp.op == Mod &&
         rhs->kind == Tuple_kind &&
+        (lhs->v.Constant.kind == NULL ||
+         !_PyUnicode_EqualToASCIIString(lhs->v.Constant.kind, "decimal")) &&
         PyUnicode_Check(lv) &&
         !has_starred(rhs->v.Tuple.elts))
     {
@@ -867,10 +869,33 @@ fold_const_match_patterns(expr_ty node, PyArena *ctx_, _PyASTPreprocessState *st
     {
         case UnaryOp_kind:
         {
+            expr_ty operand_node = node->v.UnaryOp.operand;
             if ((node->v.UnaryOp.op == USub || node->v.UnaryOp.op == UAdd) &&
-                node->v.UnaryOp.operand->kind == Constant_kind)
+                operand_node->kind == Constant_kind &&
+                operand_node->v.Constant.kind != NULL &&
+                _PyUnicode_EqualToASCIIString(
+                    operand_node->v.Constant.kind, "decimal"))
             {
-                PyObject *operand = node->v.UnaryOp.operand->v.Constant.value;
+                PyObject *value = PyUnicode_FromFormat(
+                    "%c%U",
+                    node->v.UnaryOp.op == USub ? '-' : '+',
+                    operand_node->v.Constant.value);
+                if (value == NULL) {
+                    return 0;
+                }
+                if (_PyArena_AddPyObject(ctx_, value) < 0) {
+                    Py_DECREF(value);
+                    return 0;
+                }
+                node->kind = Constant_kind;
+                node->v.Constant.value = value;
+                node->v.Constant.kind = operand_node->v.Constant.kind;
+                return 1;
+            }
+            if ((node->v.UnaryOp.op == USub || node->v.UnaryOp.op == UAdd) &&
+                operand_node->kind == Constant_kind)
+            {
+                PyObject *operand = operand_node->v.Constant.value;
                 PyObject *folded = node->v.UnaryOp.op == USub ? PyNumber_Negative(operand) : PyNumber_Positive(operand);
                 return make_const(node, folded, ctx_);
             }
@@ -883,7 +908,13 @@ fold_const_match_patterns(expr_ty node, PyArena *ctx_, _PyASTPreprocessState *st
                 node->v.BinOp.right->kind == Constant_kind)
             {
                 CALL(fold_const_match_patterns, expr_ty, node->v.BinOp.left);
-                if (node->v.BinOp.left->kind == Constant_kind) {
+                if (node->v.BinOp.left->kind == Constant_kind &&
+                    (node->v.BinOp.left->v.Constant.kind == NULL ||
+                     !_PyUnicode_EqualToASCIIString(
+                         node->v.BinOp.left->v.Constant.kind, "decimal")) &&
+                    (node->v.BinOp.right->v.Constant.kind == NULL ||
+                     !_PyUnicode_EqualToASCIIString(
+                         node->v.BinOp.right->v.Constant.kind, "decimal"))) {
                     PyObject *left = node->v.BinOp.left->v.Constant.value;
                     PyObject *right = node->v.BinOp.right->v.Constant.value;
                     PyObject *folded = op == Add ? PyNumber_Add(left, right) : PyNumber_Subtract(left, right);

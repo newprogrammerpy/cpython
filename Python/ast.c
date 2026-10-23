@@ -339,7 +339,15 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
             validate_keywords(exp->v.Call.keywords);
         break;
     case Constant_kind:
-        if (!validate_constant(exp->v.Constant.value)) {
+        if (exp->v.Constant.kind != NULL &&
+            _PyUnicode_EqualToASCIIString(exp->v.Constant.kind, "decimal")) {
+            if (!PyUnicode_CheckExact(exp->v.Constant.value)) {
+                PyErr_SetString(PyExc_TypeError,
+                                "decimal literal AST value must be a string");
+                return 0;
+            }
+        }
+        else if (!validate_constant(exp->v.Constant.value)) {
             return 0;
         }
         ret = 1;
@@ -420,6 +428,11 @@ ensure_literal_number(expr_ty exp, bool allow_real, bool allow_imaginary)
 {
     assert(exp->kind == Constant_kind);
     PyObject *value = exp->v.Constant.value;
+    if (allow_real && exp->v.Constant.kind != NULL &&
+        _PyUnicode_EqualToASCIIString(exp->v.Constant.kind, "decimal") &&
+        PyUnicode_CheckExact(value)) {
+        return 1;
+    }
     return (allow_real && PyFloat_CheckExact(value)) ||
            (allow_real && PyLong_CheckExact(value)) ||
            (allow_imaginary && PyComplex_CheckExact(value));
@@ -500,7 +513,10 @@ validate_pattern_match_value(expr_ty exp)
                 return 0;
             }
             PyObject *literal = exp->v.Constant.value;
-            if (PyLong_CheckExact(literal) || PyFloat_CheckExact(literal) ||
+            if ((exp->v.Constant.kind != NULL &&
+                 _PyUnicode_EqualToASCIIString(exp->v.Constant.kind, "decimal") &&
+                 PyUnicode_CheckExact(literal)) ||
+                PyLong_CheckExact(literal) || PyFloat_CheckExact(literal) ||
                 PyBytes_CheckExact(literal) || PyComplex_CheckExact(literal) ||
                 PyUnicode_CheckExact(literal)) {
                 return 1;
@@ -1108,7 +1124,11 @@ _PyAST_GetDocString(asdl_stmt_seq *body)
         return NULL;
     }
     expr_ty e = st->v.Expr.value;
-    if (e->kind == Constant_kind && PyUnicode_CheckExact(e->v.Constant.value)) {
+    if (e->kind == Constant_kind &&
+        (e->v.Constant.kind == NULL ||
+         !_PyUnicode_EqualToASCIIString(e->v.Constant.kind, "decimal")) &&
+        PyUnicode_CheckExact(e->v.Constant.value))
+    {
         return e->v.Constant.value;
     }
     return NULL;

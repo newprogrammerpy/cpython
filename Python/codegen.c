@@ -1895,7 +1895,16 @@ check_is_arg(expr_ty e)
          || value == Py_Ellipsis);
 }
 
+static bool
+is_decimal_literal(expr_ty e)
+{
+    return e->kind == Constant_kind &&
+        e->v.Constant.kind != NULL &&
+        _PyUnicode_EqualToASCIIString(e->v.Constant.kind, "decimal");
+}
+
 static PyTypeObject * infer_type(expr_ty e);
+static const char *infer_type_name(expr_ty e);
 
 /* Check operands of identity checks ("is" and "is not").
    Emit a warning if any operand is a constant except named singletons.
@@ -1918,7 +1927,7 @@ codegen_check_compare(compiler *c, expr_ty e)
                         : "\"is not\" with '%.200s' literal. Did you mean \"!=\"?";
                 expr_ty literal = !left ? left_expr : right_expr;
                 return _PyCompile_Warn(
-                    c, LOC(e), msg, infer_type(literal)->tp_name
+                    c, LOC(e), msg, infer_type_name(literal)
                 );
             }
         }
@@ -3778,10 +3787,23 @@ infer_type(expr_ty e)
     case FormattedValue_kind:
         return &PyUnicode_Type;
     case Constant_kind:
+        if (is_decimal_literal(e)) {
+            return NULL;
+        }
         return Py_TYPE(e->v.Constant.value);
     default:
         return NULL;
     }
+}
+
+static const char *
+infer_type_name(expr_ty e)
+{
+    if (is_decimal_literal(e)) {
+        return "Decimal";
+    }
+    PyTypeObject *type = infer_type(e);
+    return type == NULL ? "object" : type->tp_name;
 }
 
 static int
@@ -3804,7 +3826,7 @@ check_caller(compiler *c, expr_ty e)
         location loc = LOC(e);
         return _PyCompile_Warn(c, loc, "'%.200s' object is not callable; "
                                        "perhaps you missed a comma?",
-                                       infer_type(e)->tp_name);
+                                       infer_type_name(e));
     }
     default:
         return SUCCESS;
@@ -3819,7 +3841,8 @@ check_subscripter(compiler *c, expr_ty e)
     switch (e->kind) {
     case Constant_kind:
         v = e->v.Constant.value;
-        if (!(v == Py_None || v == Py_Ellipsis ||
+        if (!is_decimal_literal(e) &&
+            !(v == Py_None || v == Py_Ellipsis ||
               PyLong_Check(v) || PyFloat_Check(v) || PyComplex_Check(v) ||
               PyAnySet_Check(v)))
         {
@@ -3835,7 +3858,7 @@ check_subscripter(compiler *c, expr_ty e)
         location loc = LOC(e);
         return _PyCompile_Warn(c, loc, "'%.200s' object is not subscriptable; "
                                        "perhaps you missed a comma?",
-                                       infer_type(e)->tp_name);
+                                       infer_type_name(e));
     }
     default:
         return SUCCESS;
@@ -3870,7 +3893,7 @@ check_index(compiler *c, expr_ty e, expr_ty s)
         return _PyCompile_Warn(c, loc, "%.200s indices must be integers "
                                        "or slices, not %.200s; "
                                        "perhaps you missed a comma?",
-                                       infer_type(e)->tp_name,
+                                       infer_type_name(e),
                                        index_type->tp_name);
     }
     default:
@@ -5561,6 +5584,11 @@ codegen_visit_expr_impl(compiler *c, expr_ty e, bool result_is_unused)
     case Call_kind:
         return codegen_call(c, e);
     case Constant_kind:
+        if (is_decimal_literal(e)) {
+            ADDOP_LOAD_CONST(c, loc, e->v.Constant.value);
+            ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_DECIMAL_LITERAL);
+            break;
+        }
         ADDOP_LOAD_CONST(c, loc, e->v.Constant.value);
         break;
     case JoinedStr_kind:
@@ -5968,7 +5996,10 @@ codegen_slice(compiler *c, expr_ty s)
 
 // Limit permitted subexpressions, even if the parser & AST validator let them through
 #define MATCH_VALUE_EXPR(N) \
-    ((N)->kind == Constant_kind || (N)->kind == Attribute_kind)
+    ((N)->kind == Constant_kind || (N)->kind == Attribute_kind || \
+     ((N)->kind == UnaryOp_kind && \
+      ((N)->v.UnaryOp.op == UAdd || (N)->v.UnaryOp.op == USub) && \
+      is_decimal_literal((N)->v.UnaryOp.operand)))
 
 // Allocate or resize pc->fail_pop to allow for n items to be popped on failure.
 static int
@@ -6316,7 +6347,10 @@ codegen_pattern_mapping_key(compiler *c, PyObject *seen, pattern_ty p, Py_ssize_
         }
         RETURN_IF_ERROR(PySet_Add(seen, key->v.Constant.value));
     }
-    else if (key->kind != Attribute_kind) {
+    else if (key->kind != Attribute_kind &&
+             !(key->kind == UnaryOp_kind &&
+               (key->v.UnaryOp.op == UAdd || key->v.UnaryOp.op == USub) &&
+               is_decimal_literal(key->v.UnaryOp.operand))) {
         const char *e = "mapping pattern keys may only match literals and attribute lookups";
         return _PyCompile_Error(c, LOC(p), e);
     }

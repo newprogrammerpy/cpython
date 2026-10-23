@@ -2,6 +2,7 @@
 #include "pycore_ast.h"           // expr_ty
 #include "pycore_pystate.h"       // _PyInterpreterState_GET()
 #include "pycore_runtime.h"       // _Py_ID()
+#include "pycore_unicodeobject.h" // _PyUnicode_EqualToASCIIString()
 #include <stdbool.h>
 
 /* This limited unparser is used to convert annotations back to strings
@@ -975,6 +976,11 @@ append_ast_expr(PyUnicodeWriter *writer, expr_ty e, int level)
     case Constant_kind:
         if (e->v.Constant.value == Py_Ellipsis) {
             APPEND_STR_FINISH("...");
+        }
+        if (e->v.Constant.kind != NULL &&
+            _PyUnicode_EqualToASCIIString(e->v.Constant.kind, "decimal"))
+        {
+            return PyUnicodeWriter_WriteStr(writer, e->v.Constant.value);
         }
         if (e->v.Constant.kind != NULL
             && -1 == PyUnicodeWriter_WriteStr(writer, e->v.Constant.kind)) {

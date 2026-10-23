@@ -207,10 +207,12 @@ are syntactically not literals, but :ref:`unary <unary>` or
 operator.
 
 Evaluation of a literal yields an object of the given type
-(:class:`int`, :class:`float`, :class:`complex`, :class:`str`,
-:class:`bytes`, or :class:`~string.templatelib.Template`) with the given value.
-The value may be approximated in the case of floating-point
-and imaginary literals.
+(:class:`int`, :class:`~decimal.Decimal`, :class:`float`, :class:`complex`,
+:class:`str`, :class:`bytes`, or :class:`~string.templatelib.Template`) with
+the given value.
+Decimal floating-point literals produce exact :class:`~decimal.Decimal`
+values. Imaginary literals and complex numbers use binary floating-point
+components and may be approximated.
 
 The formal grammar for literals is:
 

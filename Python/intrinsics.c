@@ -217,6 +217,18 @@ make_frozenset(PyThreadState* Py_UNUSED(ignored), PyObject *set)
 }
 
 
+static PyObject *
+make_decimal_literal(PyThreadState* Py_UNUSED(tstate), PyObject *value)
+{
+    PyObject *decimal_type = PyImport_ImportModuleAttrString("decimal", "Decimal");
+    if (decimal_type == NULL) {
+        return NULL;
+    }
+    PyObject *result = PyObject_CallOneArg(decimal_type, value);
+    Py_DECREF(decimal_type);
+    return result;
+}
+
 #define INTRINSIC_FUNC_ENTRY(N, F) \
     [N] = {F, #N},
 
@@ -235,6 +247,7 @@ _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SUBSCRIPT_GENERIC, _Py_subscript_generic)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEALIAS, _Py_make_typealias)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_FROZENSET, make_frozenset)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_DECIMAL_LITERAL, make_decimal_literal)
 };
 
 

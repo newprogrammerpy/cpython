@@ -881,6 +881,18 @@ _PyPegen_ensure_real(Parser *p, expr_ty exp)
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(exp, "real number required in complex literal");
         return NULL;
     }
+    if (exp->v.Constant.kind != NULL &&
+        _PyUnicode_EqualToASCIIString(exp->v.Constant.kind, "decimal"))
+    {
+        PyObject *real = PyFloat_FromString(exp->v.Constant.value);
+        if (real == NULL || _PyArena_AddPyObject(p->arena, real) < 0) {
+            Py_XDECREF(real);
+            p->error_indicator = 1;
+            return NULL;
+        }
+        exp->v.Constant.value = real;
+        exp->v.Constant.kind = NULL;
+    }
     return exp;
 }
 

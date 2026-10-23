@@ -205,6 +205,67 @@ class TestSpecifics(unittest.TestCase):
         self.assertRaises(SyntaxError, eval, "1e-")
         self.assertRaises(SyntaxError, eval, "3-4e/21")
 
+    def test_exact_decimal_literals(self):
+        from decimal import Decimal, localcontext
+
+        source = "x = 0.000000000000000000000001"
+        for filename in ("example.py", "example.pyw"):
+            with self.subTest(filename=filename):
+                namespace = {}
+                exec(compile(source, filename, "exec"), namespace)
+                self.assertIs(type(namespace["x"]), Decimal)
+                self.assertEqual(namespace["x"], Decimal("1e-24"))
+                self.assertNotIn("Decimal", namespace)
+
+        for literal, expected in (
+            ("0.1", "0.1"),
+            ("1e-24", "1e-24"),
+            (".000_001", ".000001"),
+            ("2.", "2"),
+            ("1_000.25", "1000.25"),
+        ):
+            with self.subTest(literal=literal):
+                value = eval(literal)
+                self.assertIs(type(value), Decimal)
+                self.assertEqual(value, Decimal(expected))
+
+        self.assertEqual(eval("0.1 + 0.2"), Decimal("0.3"))
+        with localcontext() as context:
+            context.prec = 2
+            self.assertEqual(eval("0.123456789"), Decimal("0.123456789"))
+        self.assertIs(type(eval("1 + 2j")), complex)
+        self.assertRaises(TypeError, eval, "1.0 + 2j")
+        self.assertIs(type(eval("0x1e")), int)
+
+        namespace = {"value": Decimal("-0.1")}
+        exec(
+            "match value:\n"
+            " case -0.1:\n"
+            "  matched = True\n"
+            " case _:\n"
+            "  matched = False",
+            namespace,
+        )
+        self.assertTrue(namespace["matched"])
+        namespace = {"value": {Decimal("-0.1"): "matched"}}
+        exec(
+            "match value:\n"
+            " case {-0.1: result}:\n"
+            "  matched = result",
+            namespace,
+        )
+        self.assertEqual(namespace["matched"], "matched")
+
+        tree = ast.parse("0.1", mode="eval")
+        self.assertEqual(ast.unparse(tree), "0.1")
+        self.assertEqual(eval(compile(tree, "<test>", "eval")), Decimal("0.1"))
+        self.assertEqual(ast.literal_eval("-0.1"), Decimal("-0.1"))
+        code = compile(source, "<test>", "exec")
+        restored = marshal.loads(marshal.dumps(code))
+        namespace = {}
+        exec(restored, namespace)
+        self.assertEqual(namespace["x"], Decimal("1e-24"))
+
     def test_indentation(self):
         # testing compile() of indented block w/o trailing newline"
         s = textwrap.dedent("""
@@ -818,8 +879,27 @@ class TestSpecifics(unittest.TestCase):
         self.assertEqual(namespace['x'], 12)
 
     def check_constant(self, func, expected):
+        from decimal import Decimal
+
+        def pool_value(value):
+            if type(value) is Decimal:
+                return str(value)
+            if type(value) is tuple:
+                return tuple(map(pool_value, value))
+            if type(value) is frozenset:
+                return frozenset(map(pool_value, value))
+            return value
+
+        def pool_reprs(value):
+            result = {repr(pool_value(value))}
+            if type(value) in (tuple, frozenset):
+                for item in value:
+                    result.update(pool_reprs(item))
+            return result
+
+        expected_reprs = pool_reprs(expected)
         for const in func.__code__.co_consts:
-            if repr(const) == repr(expected):
+            if repr(const) in expected_reprs:
                 break
         else:
             self.fail("unable to find constant %r in %r"
@@ -829,11 +909,14 @@ class TestSpecifics(unittest.TestCase):
     # semantics, it's a more an implementation detail.
     @support.cpython_only
     def test_merge_constants(self):
+        from decimal import Decimal
+
         # Issue #25843: compile() must merge constants which are equal
         # and have the same type.
 
         def check_same_constant(const):
-            ns = {}
+            from decimal import Decimal
+            ns = {"Decimal": Decimal}
             code = "f1, f2 = lambda: %r, lambda: %r" % (const, const)
             exec(code, ns)
             f1 = ns['f1']
@@ -843,7 +926,7 @@ class TestSpecifics(unittest.TestCase):
             self.assertEqual(repr(f1()), repr(const))
 
         check_same_constant(None)
-        check_same_constant(0.0)
+        check_same_constant(Decimal("0.0"))
         check_same_constant(b'abc')
         check_same_constant('abc')
 
@@ -1044,11 +1127,14 @@ class TestSpecifics(unittest.TestCase):
                     self.assertNotIn('NOP', output.getvalue())
 
     def test_dont_merge_constants(self):
+        from decimal import Decimal
+
         # Issue #25843: compile() must not merge constants which are equal
         # but have a different type.
 
         def check_different_constants(const1, const2):
-            ns = {}
+            from decimal import Decimal
+            ns = {"Decimal": Decimal}
             exec("f1, f2 = lambda: %r, lambda: %r" % (const1, const2), ns)
             f1 = ns['f1']
             f2 = ns['f2']
@@ -1059,8 +1145,8 @@ class TestSpecifics(unittest.TestCase):
             self.assertEqual(repr(f1()), repr(const1))
             self.assertEqual(repr(f2()), repr(const2))
 
-        check_different_constants(+0.0, -0.0)
-        check_different_constants((0,), (0.0,))
+        check_different_constants(Decimal("+0.0"), Decimal("-0.0"))
+        check_different_constants((0,), (Decimal("0.0"),))
         check_different_constants('a', b'a')
         check_different_constants(('a',), (b'a',))
 
@@ -1745,7 +1831,7 @@ class TestSpecifics(unittest.TestCase):
             slice,
             [
                 slice(None, 0, None),
-                slice(None, 0.0, None),
+                slice(None, "0.0", None),
                 slice(None, False, None),
                 slice(None, None, None)
             ]
