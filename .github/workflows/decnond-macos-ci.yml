@@ -1,0 +1,18 @@
+name: Decnond macOS tests
+
+on:
+  push:
+    branches:
+      - decnond-macos-check-20261031
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Run Decnond tests
+        working-directory: Tools/decnond
+        run: python -m unittest -v test_decnond.py
