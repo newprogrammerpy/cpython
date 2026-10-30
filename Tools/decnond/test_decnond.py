@@ -57,7 +57,7 @@ class RunTests(unittest.TestCase):
             self.assertEqual(namespace["name"], "__main__")
             self.assertEqual(namespace["filename"], str(path.resolve()))
             self.assertEqual(namespace["argument"], str(path.resolve()))
-            self.assertEqual(namespace["path_entry"], directory)
+            self.assertEqual(namespace["path_entry"], str(Path(directory).resolve()))
             self.assertIs(sys.argv, old_argv)
             self.assertIs(sys.path, old_path)
             self.assertEqual(sys.argv, saved_argv)
